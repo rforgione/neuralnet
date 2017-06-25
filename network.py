@@ -19,11 +19,12 @@ class Network(object):
                                                               self.architecture[1:])]
 
     def initialize_biases(self):
-        self.biases = [np.random.randn(x, 1) for x in self.architecture]
+        self.biases = [np.random.randn(x, 1) for x in self.architecture[1:]]
 
     def feedforward(self, x, full_output=False):
-        z = [np.dot(self.weights[0], x.transpose()) + self.biases[0]]
-        activations = [self.sigmoid(z[0])]
+        activations = [x]
+        z = []
+
         for i in range(len(self.weights)):
             z.append(np.dot(self.weights[i], activations[-1]) + self.biases[i])
             activations.append(self.sigmoid(z[-1]))
@@ -35,7 +36,7 @@ class Network(object):
             # return only the last layer output values
             return activations[-1]
 
-    def backprop(self, X, y, cost):
+    def backprop(self, x, y, cost):
         # there's a single bias for every neuron,
         # so we can uses the biases to double as
         # a representation of the network architecture.
@@ -43,68 +44,62 @@ class Network(object):
         weight_grads = [np.zeros(i.shape) for i in self.weights]
         bias_grads = [np.zeros(i.shape) for i in self.biases]
 
-        activations, z = self.feedforward(X, full_output=True)
+        activations, z = self.feedforward(x, full_output=True)
 
         deltas[-1] = cost.delta(activations[-1], y)
-        weight_grads[-1] = deltas[-1] * activations[-2]
-        bias_grads[-1] = deltas[-1]
 
-        for i in xrange(2, len(self.architecture)):
-            deltas[-i] = np.multiply(np.dot(self.weights[-i + 1].T, deltas[-i + 1]), z[-i])
+        # 2 x 1 -> 1 x 2
+        # output x 1 * 1 x 2 = output * activation_length
+        weight_grads[-1] = deltas[-1].dot(activations[-2].T)
+        bias_grads[-1] = deltas[-1].dot(np.ones(deltas[-1].shape).T)
+
+        for i in xrange(2, len(self.weights)):
+            deltas[-i] = np.multiply(np.dot(self.weights[-i + 1], deltas[-i + 1]), z[-i])
             weight_grads[-i] = np.dot(deltas[-i], activations[-i - 1])
             bias_grads[-i] = deltas[-i]
+
         return weight_grads, bias_grads
 
     def update_mini_batch(self, mini_batch_x, mini_batch_y, eta=.01):
-        n = mini_batch_x.shape[0]
-        total_weight_gradient = [np.zeros(self.weights[i].shape) for i in range(len(self.weights))]
-        total_bias_gradient = [np.zeros(self.biases[i].shape) for i in range(len(self.biases))]
+        n = mini_batch_x.shape[1]
 
-        for j in xrange(n):
-            new_weight_gradient, new_bias_gradient = self.backprop(mini_batch_x, mini_batch_y, self.cost)
-            total_weight_gradient = [a + b for a, b in zip(total_weight_gradient, new_bias_gradient)]
-            total_bias_gradient = [a + b for a, b in zip(total_bias_gradient, new_bias_gradient)]
+        weight_gradient, bias_gradient = self.backprop(mini_batch_x, mini_batch_y, self.cost)
 
-        weight_adjustment = [(eta/n)*val for val in total_weight_gradient]
-        bias_adjustment = [(eta/n)*val for val in total_bias_gradient]
+        weight_adjustment = [(eta/n)*val for val in weight_gradient]
+        bias_adjustment = [(eta/n)*val for val in bias_gradient]
 
         self.weights = [a - b for a, b in zip(self.weights, weight_adjustment)]
         self.biases = [a - b for a, b in zip(self.biases, bias_adjustment)]
 
-        pass
-
-    def train(self, x, y, epochs=1, batch_shape=None, eta=.01):
-        if not batch_shape:
-            batch_shape = x.shape[0]
+    def train(self, x, y, epochs=1, batch_size=None, eta=.01, quiet=False):
+        if not batch_size:
+            batch_size = x.shape[0]
 
         for i in xrange(epochs):
-            print "Beginning epoch %s." % i
+            if not quiet:
+                print "Beginning epoch %s." % i
 
             lower_bound = 0
-            upper_bound = batch_shape
+            upper_bound = batch_size
             training_complete = False
 
             while not training_complete:
-                mini_batch_x = x[lower_bound:upper_bound, :]
+                mini_batch_x = x[lower_bound:upper_bound, :].T
                 mini_batch_y = y[lower_bound:upper_bound]
 
                 self.update_mini_batch(mini_batch_x, mini_batch_y, eta=eta)
 
-                lower_bound = upper_bound + 1
-                upper_bound = lower_bound + batch_shape
+                lower_bound = upper_bound
+                upper_bound = lower_bound + batch_size
 
-                if lower_bound > x.shape[0]:
+                if lower_bound >= x.shape[0]:
                     training_complete = True
 
         return self.get_auc(x, y)
 
     def get_auc(self, x, y):
-        predicted = self.feedforward(x)
-        print predicted.shape
-        print self.weights
-        print self.architecture
-        raise SystemExit
-        return roc_auc_score(y, predicted)
+        predicted = self.feedforward(x.T)
+        return roc_auc_score(y, predicted.ravel(0))
 
 
     @staticmethod

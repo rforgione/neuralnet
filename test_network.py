@@ -13,25 +13,21 @@ class TestNetwork(TestCase):
     def sigmoid_to_binary(x):
         return np.vectorize(lambda g: 1 if g >= .5 else 0)(x)
 
-    def test_find_coefficeints(self):
+    def test_find_coefficients(self):
         x_matrix = np.random.randn(100, 2)
         coef = np.array([3, 2])
-        y_vector = self.sigmoid_to_binary(self.sigmoid(coef.dot(x_matrix.T)))
+        y_vector = self.sigmoid_to_binary(self.sigmoid(coef.dot(x_matrix.transpose())))
 
         # input: [x1,
         #         x2]
         #
-        # weights: [[ b11, b12 ]]
+        # weights: [[ b11, b12 ]
         #
 
         net = Network([2, 1], CrossEntropy)
 
-        net.train(x_matrix, y_vector)
+        net.train(x_matrix, y_vector, eta=0.5, epochs=80, quiet=True)
 
-        self.assertAlmostEqual(coef[0], net.weights[0][0], places=.1)
-
-
-
-
-
-
+        print coef[0]
+        print net.weights[0][0]
+        assert np.allclose(coef, net.weights[0][0], atol=.5)
